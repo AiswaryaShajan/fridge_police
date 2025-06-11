@@ -1,0 +1,6 @@
+fridge_env/
+__pycache__/
+*.pyc
+*.h5
+*.png
+.DS_Store

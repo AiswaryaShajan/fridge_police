@@ -1,3 +1,2 @@
-Carrot
-Cucumber
-Milk
+carrots
+not_carrots
