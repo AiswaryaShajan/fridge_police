@@ -1,2 +1,7 @@
-carrots
-not_carrots
+0 carrots
+1 not_fridge_item
+2 milk
+3 lettuce
+4 cucumber
+5 white_eggs
+6 brown_eggs
