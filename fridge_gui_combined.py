@@ -10,6 +10,10 @@ import cv2
 import numpy as np
 import tensorflow as tf
 
+# Window settings
+WINDOW_WIDTH = 512  # Match your logo's width
+WINDOW_HEIGHT = 740  # Adjusted for logo + compact buttons
+
 def resource_path(filename):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, filename)
@@ -22,24 +26,33 @@ class FridgePoliceApp:
         self.root.geometry("512x768")
         self.root.resizable(False, False)
 
+        # Load background logo (the main image)
         self.bg_home = ImageTk.PhotoImage(Image.open(resource_path("final_home_screen.png")))
 
+        # Main frame and canvas
         self.home_frame = tk.Frame(self.root, width=512, height=768)
         self.home_frame.pack()
         self.canvas = tk.Canvas(self.home_frame, width=512, height=768, highlightthickness=0)
         self.canvas.pack()
         self.canvas.create_image(0, 0, anchor="nw", image=self.bg_home)
 
-        self.btn_groceries = tk.Button(self.home_frame, text="SHOW GROCERIES", command=self.scan_items,
-                                       bg="#2d2d2d", fg="white", font=("Arial", 14, "bold"))
-        self.btn_fridge = tk.Button(self.home_frame, text="SHOW FRIDGE", command=self.show_fridge,
-                                    bg="#2d2d2d", fg="white", font=("Arial", 14, "bold"))
-        self.btn_expiring = tk.Button(self.home_frame, text="SHOW EXPIRES", command=self.show_expires,
-                                      bg="#2d2d2d", fg="white", font=("Arial", 14, "bold"))
+        # Button parameters: smaller size, tighter spacing
+        btn_width = 250
+        btn_height = 35
+        btn_font = ("Arial", 12, "bold")
 
-        self.canvas.create_window(256, 570, window=self.btn_groceries, width=300, height=50)
-        self.canvas.create_window(256, 640, window=self.btn_fridge, width=300, height=50)
-        self.canvas.create_window(256, 710, window=self.btn_expiring, width=300, height=50)
+        # The three buttons
+        self.btn_groceries = tk.Button(self.home_frame, text="SHOW GROCERIES", command=self.scan_items,
+                                       bg="#2d2d2d", fg="white", font=btn_font)
+        self.btn_fridge = tk.Button(self.home_frame, text="SHOW FRIDGE", command=self.show_fridge,
+                                    bg="#2d2d2d", fg="white", font=btn_font)
+        self.btn_expiring = tk.Button(self.home_frame, text="SHOW EXPIRES", command=self.show_expires,
+                                      bg="#2d2d2d", fg="white", font=btn_font)
+
+        # Place buttons closer together, higher up (near the logo)
+        self.canvas.create_window(256, 420, window=self.btn_groceries, width=btn_width, height=btn_height)
+        self.canvas.create_window(256, 470, window=self.btn_fridge, width=btn_width, height=btn_height)
+        self.canvas.create_window(256, 520, window=self.btn_expiring, width=btn_width, height=btn_height)
 
     def scan_items(self):
         import threading
@@ -55,13 +68,13 @@ class FridgePoliceApp:
 
     def show_fridge(self):
         self.home_frame.pack_forget()
-        self.fridge_frame = tk.Frame(self.root, width=512, height=768, bg="white")
+        self.fridge_frame = tk.Frame(self.root, width=WINDOW_WIDTH, height=WINDOW_HEIGHT, bg="white")
         self.fridge_frame.pack()
 
         title = tk.Label(self.fridge_frame, text="🧊 Items in Your Fridge", font=("Arial", 16, "bold"), bg="white")
         title.pack(pady=(20, 10))
 
-        self.log_text = tk.Text(self.fridge_frame, wrap="word", font=("Arial", 12), width=50, height=25)
+        self.log_text = tk.Text(self.fridge_frame, wrap="word", font=("Arial", 12), width=45, height=18)
         self.log_text.pack(padx=20, pady=10)
 
         self.load_fridge_log()
@@ -112,13 +125,13 @@ class FridgePoliceApp:
 
     def show_expires(self):
         self.home_frame.pack_forget()
-        self.expiry_frame = tk.Frame(self.root, width=512, height=768, bg="white")
+        self.expiry_frame = tk.Frame(self.root, width=WINDOW_WIDTH, height=WINDOW_HEIGHT, bg="white")
         self.expiry_frame.pack()
 
         title = tk.Label(self.expiry_frame, text="⏳ Items Nearing Expiry", font=("Arial", 16, "bold"), bg="white")
         title.pack(pady=(20, 10))
 
-        self.expiry_text = tk.Text(self.expiry_frame, wrap="word", font=("Arial", 12), width=50, height=25)
+        self.expiry_text = tk.Text(self.expiry_frame, wrap="word", font=("Arial", 12), width=45, height=18)
         self.expiry_text.pack(padx=20, pady=10)
 
         self.load_expiry_list()
@@ -172,7 +185,10 @@ class FridgePoliceApp:
             self.expiry_text.insert("end", "✅ No items nearing expiry!")
 
 def run_scanner():
-    model = tf.keras.models.load_model(resource_path("keras_model.h5"))
+    model_path = resource_path("rebuilt_model.h5")
+    print("Model path:", model_path)
+    print("Exists?", os.path.exists(model_path))
+    model = tf.keras.models.load_model(model_path, compile=False)    
     with open(resource_path("labels.txt"), "r") as f:
         class_names = [line.strip().split(" ", 1)[1] for line in f.readlines()]
     with open(resource_path("shelf_life.json"), "r") as f:
@@ -198,27 +214,28 @@ def run_scanner():
         idx = np.argmax(prediction)
         return class_names[idx], prediction[idx]
 
-
+    # Increased window height for visibility
     scanner = tk.Toplevel()
     scanner.title("Fridge Scanner")
-    scanner.geometry("600x550")
+    scanner.geometry("600x700")  # Increased height
     scanner.configure(bg="white")
 
     top_frame = tk.Frame(scanner, bg="white")
     top_frame.pack(pady=10)
 
+    # Shrink video label if desired, e.g., width=500, height=375 for 4:3 ratio
     video_label = tk.Label(top_frame)
     video_label.pack()
 
     bottom_frame = tk.Frame(scanner, bg="white")
-    bottom_frame.pack(pady=10)
+    bottom_frame.pack(pady=30)  # Increased padding to give room for the button
 
     status_label = tk.Label(bottom_frame, text="Scanning...", font=("Arial", 16), bg="white")
     status_label.pack(pady=5)
 
     stop_btn = tk.Button(bottom_frame, text="🛑 Stop Scan", font=("Arial", 12), command=scanner.destroy,
                          bg="#d9534f", fg="white")
-    stop_btn.pack()
+    stop_btn.pack(pady=8)  # Add vertical padding for comfort
 
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     print("[INFO] Camera opened:", cap.isOpened())
@@ -244,9 +261,9 @@ def run_scanner():
         try:
             item, confidence = predict(frame)
         except Exception as e:
-            status_label.config(text=f"Prediction error")
-            print("[ERROR]", e)
-            return
+                status_label.config(text=f"Prediction error: {e}")
+                print("[ERROR]", e)
+                return
         if confidence > confidence_threshold and item != "not_fridge_item":
             if item == last_label:
                 stable_counter += 1

@@ -1,4 +1,6 @@
-tensorflow
+streamlit
 opencv-python
 numpy
+tensorflow
 pillow
+streamlit-option-menu
