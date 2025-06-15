@@ -4,3 +4,5 @@ __pycache__/
 *.h5
 *.png
 .DS_Store
+dist/*.exe
+build/**/*.pkg
