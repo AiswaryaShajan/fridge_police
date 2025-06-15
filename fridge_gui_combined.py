@@ -1,5 +1,3 @@
-
-from scan_groceries_screen import ScanGroceriesScreen
 import tkinter as tk
 from PIL import Image, ImageTk
 import subprocess
@@ -8,6 +6,14 @@ import json
 import os
 import datetime
 import winsound
+import cv2
+import numpy as np
+import tensorflow as tf
+
+def resource_path(filename):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, filename)
+    return os.path.join(os.path.abspath("."), filename)
 
 class FridgePoliceApp:
     def __init__(self, root):
@@ -16,7 +22,7 @@ class FridgePoliceApp:
         self.root.geometry("512x768")
         self.root.resizable(False, False)
 
-        self.bg_home = ImageTk.PhotoImage(Image.open("final_home_screen.png"))
+        self.bg_home = ImageTk.PhotoImage(Image.open(resource_path("final_home_screen.png")))
 
         self.home_frame = tk.Frame(self.root, width=512, height=768)
         self.home_frame.pack()
@@ -36,9 +42,16 @@ class FridgePoliceApp:
         self.canvas.create_window(256, 710, window=self.btn_expiring, width=300, height=50)
 
     def scan_items(self):
+        import threading
         self.root.withdraw()
-        subprocess.run([sys.executable, "app_final_summary.py"])
-        self.root.deiconify()
+        def scanner_thread():
+            try:
+                run_scanner()
+            except Exception as e:
+                print("[ERROR]", e)
+            finally:
+                self.root.deiconify()
+        threading.Thread(target=scanner_thread, daemon=True).start()
 
     def show_fridge(self):
         self.home_frame.pack_forget()
@@ -66,8 +79,9 @@ class FridgePoliceApp:
 
     def load_fridge_log(self):
         self.log_text.delete("1.0", "end")
-        if os.path.exists("fridge_log.json"):
-            with open("fridge_log.json", "r") as f:
+        log_path = resource_path("fridge_log.json")
+        if os.path.exists(log_path):
+            with open(log_path, "r") as f:
                 log = json.load(f)
             unique = {}
             for entry in log:
@@ -78,15 +92,15 @@ class FridgePoliceApp:
             if unique:
                 for item, date in unique.items():
                     self.log_text.insert("end", f"- {item} (added: {date})\n")
-
             else:
                 self.log_text.insert("end", "Fridge is currently empty.")
         else:
             self.log_text.insert("end", "No fridge log found.")
 
     def clear_fridge_log(self):
-        if os.path.exists("fridge_log.json"):
-            os.remove("fridge_log.json")
+        log_path = resource_path("fridge_log.json")
+        if os.path.exists(log_path):
+            os.remove(log_path)
         self.load_fridge_log()
 
     def go_home(self):
@@ -118,17 +132,17 @@ class FridgePoliceApp:
 
     def load_expiry_list(self):
         self.expiry_text.delete("1.0", "end")
-
-        if not os.path.exists("fridge_log.json") or not os.path.exists("shelf_life.json"):
+        log_path = resource_path("fridge_log.json")
+        shelf_path = resource_path("shelf_life.json")
+        if not os.path.exists(log_path) or not os.path.exists(shelf_path):
             self.expiry_text.insert("end", "No data found.")
             return
 
-        with open("fridge_log.json", "r") as f:
+        with open(log_path, "r") as f:
             log = json.load(f)
-
-        with open("shelf_life.json", "r") as f:
+        with open(shelf_path, "r") as f:
             shelf_life = json.load(f)
-            
+
         today = datetime.date.today()
         shown = False
         checked = set()
@@ -148,53 +162,122 @@ class FridgePoliceApp:
                     status = "❌ expired"
                 elif days_left == 0:
                     status = "⚠️ expires today!"
-                    self.show_notification(item)
                 elif days_left == 1:
-                    status = f"⚠️ expires in 1 day(s)"
-                    self.show_notification(item)
+                    status = "⚠️ expires in 1 day"
                 else:
-                    status = f"⚠️ expires in {days_left} day(s)"
+                    status = f"⚠️ expires in {days_left} days"
                 self.expiry_text.insert("end", f"- {item} (added: {entry['added_on']}, {status})\n")
-
 
         if not shown:
             self.expiry_text.insert("end", "✅ No items nearing expiry!")
 
-    def show_notification(self, item_name):
-        toast = tk.Toplevel(self.root)
-        toast.overrideredirect(True)
-        toast.attributes("-topmost", True)
-        toast.configure(bg="#ffcc00")
+def run_scanner():
+    model = tf.keras.models.load_model(resource_path("keras_model.h5"))
+    with open(resource_path("labels.txt"), "r") as f:
+        class_names = [line.strip().split(" ", 1)[1] for line in f.readlines()]
+    with open(resource_path("shelf_life.json"), "r") as f:
+        shelf_life = json.load(f)
+    log_file = resource_path("fridge_log.json")
 
-        x = self.root.winfo_rootx() + 106
-        toast.geometry(f"300x0+{x}+0")
+    def load_log():
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                return json.load(f)
+        return []
 
-        label = tk.Label(toast, text=f"🔔 {item_name} expires soon!", font=("Arial", 11, "bold"),
-                         bg="#ffcc00", fg="black")
-        label.pack(fill="both", expand=True, padx=10, pady=10)
+    def save_log(data):
+        with open(log_file, "w") as f:
+            json.dump(data, f, indent=4)
 
-        def slide_in():
-            h = toast.winfo_height()
-            if h < 50:
-                toast.geometry(f"300x{h + 5}+{x}+0")
-                toast.after(10, slide_in)
-            else:
-                toast.after(2500, slide_out)
+    def predict(frame):
+        img = cv2.resize(frame, (224, 224))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = np.asarray(img, dtype=np.float32) / 255.0
+        img = np.expand_dims(img, axis=0)
+        prediction = model.predict(img)[0]
+        idx = np.argmax(prediction)
+        return class_names[idx], prediction[idx]
 
-        def slide_out():
-            h = toast.winfo_height()
-            if h > 0:
-                toast.geometry(f"300x{h - 5}+{x}+0")
-                toast.after(10, slide_out)
-            else:
-                toast.destroy()
+
+    scanner = tk.Toplevel()
+    scanner.title("Fridge Scanner")
+    scanner.geometry("600x550")
+    scanner.configure(bg="white")
+
+    top_frame = tk.Frame(scanner, bg="white")
+    top_frame.pack(pady=10)
+
+    video_label = tk.Label(top_frame)
+    video_label.pack()
+
+    bottom_frame = tk.Frame(scanner, bg="white")
+    bottom_frame.pack(pady=10)
+
+    status_label = tk.Label(bottom_frame, text="Scanning...", font=("Arial", 16), bg="white")
+    status_label.pack(pady=5)
+
+    stop_btn = tk.Button(bottom_frame, text="🛑 Stop Scan", font=("Arial", 12), command=scanner.destroy,
+                         bg="#d9534f", fg="white")
+    stop_btn.pack()
+
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    print("[INFO] Camera opened:", cap.isOpened())
+    log = load_log()
+
+    last_label = None
+    stable_counter = 0
+    detection_threshold = 5
+    confidence_threshold = 0.85
+    logged_items = set()
+
+    def update_frame():
+        nonlocal last_label, stable_counter
+        ret, frame = cap.read()
+        if not ret or frame is None or frame.size == 0:
+            status_label.config(text="⚠️ Failed to read from camera.")
+            print("[ERROR] Blank or failed frame.")
+            return
+        if not ret:
+            status_label.config(text="⚠️ Camera read failed")
+            return
 
         try:
-            winsound.MessageBeep()
-        except:
-            pass
+            item, confidence = predict(frame)
+        except Exception as e:
+            status_label.config(text=f"Prediction error")
+            print("[ERROR]", e)
+            return
+        if confidence > confidence_threshold and item != "not_fridge_item":
+            if item == last_label:
+                stable_counter += 1
+            else:
+                stable_counter = 0
+                last_label = item
 
-        slide_in()
+            if stable_counter == detection_threshold and item not in logged_items:
+                status_label.config(text=f"✅ Got: {item} ({confidence*100:.1f}%)")
+                log.append({"item": item, "added_on": str(datetime.date.today())})
+                save_log(log)
+                logged_items.add(item)
+                stable_counter = 0
+        else:
+            status_label.config(text=f"🔍 {item} ({confidence*100:.1f}%)")
+            stable_counter = 0
+            last_label = None
+
+        cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(cv2image)
+        imgtk = ImageTk.PhotoImage(image=img)
+        video_label.imgtk = imgtk
+        video_label.configure(image=imgtk)
+
+        if scanner.winfo_exists():
+            scanner.after(10, update_frame)
+        else:
+            cap.release()
+
+    update_frame()
+    scanner.mainloop()
 
 if __name__ == "__main__":
     root = tk.Tk()

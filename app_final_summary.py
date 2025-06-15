@@ -1,21 +1,27 @@
-
+    
 import cv2
 import numpy as np
 import tensorflow as tf
 import datetime
+import sys, os
+def resource_path(filename):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, filename)
+    return os.path.join(os.path.abspath("."), filename)
+
 import json
 import os
 
 # Load model and labels
-model = tf.keras.models.load_model("keras_model.h5")
-with open("labels.txt", "r") as f:
+model = tf.keras.models.load_model(resource_path("keras_model.h5"))
+with open(resource_path("labels.txt"), "r") as f:
     class_names = [line.strip().split(" ", 1)[1] for line in f.readlines()]
 
 # Load shelf life
-with open("shelf_life.json", "r") as f:
+with open(resource_path("shelf_life.json"), "r") as f:
     shelf_life = json.load(f)
 
-log_file = "fridge_log.json"
+log_file = resource_path("fridge_log.json")
 
 def load_log():
     if os.path.exists(log_file):
