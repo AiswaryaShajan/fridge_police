@@ -3,6 +3,11 @@
 
 Fridge Police is a desktop app that helps monitor perishable fridge items using a webcam and a custom-trained machine learning model. Originally inspired by everyday challenges faced at home, it aims to reduce food waste by detecting items and alerting users about upcoming expiry.
 
+## Download the Application
+
+You can download the latest Windows executable here:  
+[Download fridge_gui_combined.exe (Google Drive)](https://drive.google.com/file/d/1BZuPmUK27jrmjiiT5SXu6FE_sv6VoIJ-/view?usp=sharing)
+
 ## 🔧 How It Works
 
 - Uses a **Logitech webcam** to capture real-time images
